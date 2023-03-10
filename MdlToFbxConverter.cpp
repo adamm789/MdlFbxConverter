@@ -2,15 +2,14 @@
 #include "../eigen-3.4.0/Eigen/Dense"
 
 // Pretty much entirely from https://github.com/TexTools/TT_FBX_Reader/blob/master/TT_FBX/src/db_converter.cpp
-
-
 MdlToFbxConverter::MdlToFbxConverter(const char* mdlFilePath, const char* outputPath) {
 	fprintf(stdout, "Converting %s to %s\n", mdlFilePath, outputPath);
 	this->outputPath = outputPath;
 
-	mdlFile = new MdlFile(mdlFilePath);
+	mdlFile = new MdlFile();
+	mdlFile->LoadFromFile(mdlFilePath);
+	
 	model = new Model(mdlFile);
-
 	manager = FbxManager::Create();
 
 	FbxIOSettings* ios = FbxIOSettings::Create(manager, IOSROOT);
@@ -21,12 +20,11 @@ MdlToFbxConverter::MdlToFbxConverter(const char* mdlFilePath, const char* output
 
 	scene->Destroy();
 	manager->Destroy();
-
-	mdlFile->Destroy();
 }
 
 MdlToFbxConverter::~MdlToFbxConverter() {
-
+	delete mdlFile;
+	delete model;
 }
 
 void MdlToFbxConverter::SetSkeletonFromFile(std::string filePath)
@@ -56,12 +54,11 @@ void MdlToFbxConverter::CreateScene(Model* model) {
 	root->AddChild(firstNode);
 
 	// TODO: Build a skeleton from something other than a file that came from TexTools
-	Bone* bone = Skeleton::BuildSkeletonFromFile("..\\Skeletons\\c0101b0001.skel");
-	n_root = bone;
+	n_root = Skeleton::BuildSkeletonFromFile("..\\Skeletons\\c0101b0001.skel");
 
 	FbxPose* pose = FbxPose::Create(manager, "Bindpose");
 	pose->SetIsBindPose(true);
-	AddBoneToScene(bone, pose, firstNode);
+	AddBoneToScene(n_root, pose, firstNode);
 	scene->AddPose(pose);
 
 	CreateMaterials();
@@ -82,8 +79,22 @@ void MdlToFbxConverter::CreateScene(Model* model) {
 	pose->Add(firstNode, firstNode->EvaluateGlobalTransform());
 }
 
+FbxDouble3 MatrixToScale(Eigen::Transform<double, 3, Eigen::Affine> affineMatrix) {
+
+	Eigen::Matrix4d m = affineMatrix.matrix();
+
+	FbxVector4 row1 = FbxVector4(m(0, 0), m(1, 0), m(2, 0));
+	FbxVector4 row2 = FbxVector4(m(0, 1), m(1, 1), m(2, 1));
+	FbxVector4 row3 = FbxVector4(m(0, 2), m(1, 2), m(2, 2));
+	FbxDouble3 ret;
+	ret[0] = row1.Length();
+	ret[1] = row2.Length();
+	ret[2] = row3.Length();
+	return ret;
+}
+
 void MdlToFbxConverter::AddBoneToScene(Bone* bone, FbxPose* bindPose, FbxNode* parentNode) {
-	// TODO: How can I get the bones into the right positions? Can I even do that?
+	// TODO: Bones seem to be in position, but all facing the wrong directions (seems to be "outwards")
 	if (bone == NULL) return;
 
 	FbxNode* node = FbxNode::Create(manager, bone->Name.c_str());
@@ -121,20 +132,6 @@ void MdlToFbxConverter::AddBoneToScene(Bone* bone, FbxPose* bindPose, FbxNode* p
 	for (int i = 0; i < bone->Children.size(); i++) {
 		AddBoneToScene(bone->Children[i], bindPose, node);
 	}
-}
-
-FbxDouble3 MatrixToScale(Eigen::Transform<double, 3, Eigen::Affine> affineMatrix) {
-
-	Eigen::Matrix4d m = affineMatrix.matrix();
-
-	FbxVector4 row1 = FbxVector4(m(0, 0), m(1, 0), m(2, 0));
-	FbxVector4 row2 = FbxVector4(m(0, 1), m(1, 1), m(2, 1));
-	FbxVector4 row3 = FbxVector4(m(0, 2), m(1, 2), m(2, 2));
-	FbxDouble3 ret;
-	ret[0] = row1.Length();
-	ret[1] = row2.Length();
-	ret[2] = row3.Length();
-	return ret;
 }
 
 // TODO: Allow providing a material to assign to the model (MtrlFile?)
@@ -197,6 +194,10 @@ void MdlToFbxConverter::CreateMaterials() {
 
 		MaterialPathToSurfaceMaterial.emplace(mat.MaterialPath, lMaterial);
 	}
+}
+
+bool CompareShape(const Shape& lhs, const Shape& rhs) {
+	return lhs.ShapeValuesStartIndex > rhs.ShapeValuesStartIndex;
 }
 
 void MdlToFbxConverter::AddPartToScene(Mesh* group, Submesh* part, FbxNode* parent, int indicesOffset, int partNumber) {
@@ -336,10 +337,6 @@ void MdlToFbxConverter::AddPartToScene(Mesh* group, Submesh* part, FbxNode* pare
 	FbxPose* pose = scene->GetPose(0);
 	FbxMatrix bind = node->EvaluateGlobalTransform();
 	pose->Add(node, bind);
-}
-
-bool CompareShape(const Shape& lhs, const Shape& rhs) {
-	return lhs.ShapeValuesStartIndex > rhs.ShapeValuesStartIndex;
 }
 
 FbxMesh* MdlToFbxConverter::MakeMesh(std::vector<Vertex>& vertices, std::vector<unsigned short>& indices, std::string meshName, FbxNode* parent, FbxSurfaceMaterial* material) {

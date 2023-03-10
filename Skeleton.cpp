@@ -32,7 +32,7 @@ Bone* Skeleton::BuildSkeletonFromFile(std::string filePath) {
 
 			for (int row = 0; row < 4; row++) {
 				for (int col = 0; col < 4; col++) {
-					matrix(row, col) = matrixArr[(row * 4) + col];
+					matrix(row, col) = matrixArr[(col * 4) + row];
 				}
 			}
 
@@ -40,7 +40,7 @@ Bone* Skeleton::BuildSkeletonFromFile(std::string filePath) {
 			boneNumbers.emplace(number, b);
 
 			if (name == "n_root") {
-				ret = boneNumbers[number];
+				ret = boneNumbers[number]; 
 			}
 
 			if (parent != -1) {

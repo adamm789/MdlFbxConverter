@@ -1,6 +1,6 @@
 # MdlFbxConverter
 
 Use by creating a MdlFbxConverter:  
-``` MdlFbxConverter("path to mdl") ```  
+``` MdlFbxConverter converter("path to mdl") ```  
 
 Probably has memory leaks.

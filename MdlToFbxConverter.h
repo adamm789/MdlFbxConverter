@@ -5,12 +5,15 @@
 #include "include/fbxsdk.h"
 #include "Skeleton.h"
 
-
 class MdlToFbxConverter
 {
 public:
-	MdlToFbxConverter(const char* filePath, const char* outputPath = "output.fbx");
+	MdlToFbxConverter(std::string filePath, std::string outputPath = "output.fbx");
 	~MdlToFbxConverter();
+
+	void SetModel(Model* mdl);
+	void SetMaterial(Material* mtrl);
+	void SetMaterials(std::vector<Material*> mtrls);
 
 	void SetSkeletonFromFile(std::string filePath);
 	void SetSkeletonFromData(const char* data);

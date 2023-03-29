@@ -1,15 +1,15 @@
 #pragma once
 
 #include <string>
-#include "../LuminaPlusPlus/Models/Models/Model.h"
-#include "include/fbxsdk.h"
+#include "LuminaPlusPlus/Models/Models/Model.h"
+#include "fbxsdk.h"
 #include "Skeleton.h"
 
 class MdlToFbxConverter
 {
 public:
-	MdlToFbxConverter(std::string filePath, std::string outputPath = "output.fbx");
-	~MdlToFbxConverter();
+	__declspec(dllexport) MdlToFbxConverter(const char* filePath, const char* outputPath = "output.fbx");
+	__declspec(dllexport) ~MdlToFbxConverter();
 
 	void SetModel(Model* mdl);
 	void SetMaterial(Material* mtrl);

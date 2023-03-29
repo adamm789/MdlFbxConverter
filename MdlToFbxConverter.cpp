@@ -1,9 +1,9 @@
 #include "MdlToFbxConverter.h"
-#include "../eigen-3.4.0/Eigen/Dense"
+#include "Eigen/Dense"
 
 // Pretty much entirely from https://github.com/TexTools/TT_FBX_Reader/blob/master/TT_FBX/src/db_converter.cpp
-MdlToFbxConverter::MdlToFbxConverter(std::string mdlFilePath, std::string outputPath) {
-	fprintf(stdout, "Converting %s to %s\n", mdlFilePath.c_str(), outputPath.c_str());
+MdlToFbxConverter::MdlToFbxConverter(const char* mdlFilePath, const char* outputPath) {
+	fprintf(stdout, "Converting %s to %s\n", mdlFilePath, outputPath);
 	this->outputPath = outputPath;
 
 	mdlFile = new MdlFile();
@@ -11,7 +11,7 @@ MdlToFbxConverter::MdlToFbxConverter(std::string mdlFilePath, std::string output
 
 	//mdlFile = MdlFile::LoadFromData();
 	//mdlFile = MdlFile::LoadFromFile2(mdlFilePath);
-	
+
 	model = new Model(mdlFile);
 	manager = FbxManager::Create();
 
@@ -28,11 +28,6 @@ MdlToFbxConverter::MdlToFbxConverter(std::string mdlFilePath, std::string output
 MdlToFbxConverter::~MdlToFbxConverter() {
 	delete mdlFile;
 	delete model;
-
-	std::map<Bone*, FbxNode*>::iterator it;
-	for (it = BoneToNode.begin(); it != BoneToNode.end(); it++) {
-		delete it->first;
-	}
 }
 
 void MdlToFbxConverter::SetSkeletonFromFile(std::string filePath)
@@ -63,10 +58,32 @@ void MdlToFbxConverter::CreateScene(Model* model) {
 
 	// TODO: Build a skeleton from something other than a file that came from TexTools
 	n_root = Skeleton::BuildSkeletonFromFile("..\\Skeletons\\c0101b0001.skel");
-
 	FbxPose* pose = FbxPose::Create(manager, "Bindpose");
 	pose->SetIsBindPose(true);
+
+	if (n_root == NULL) {
+		// Create a skeleton where every bone is the identity matrix
+		// This is theoretically a failsafe to make sure the weights are actually set later on
+		
+		// TODO: Find better method to make sure weights are actually painted?
+		fprintf(stderr, "Could not get skeleton.\nCreating empty skeleton.\n");
+		n_root = new Bone("n_root");
+		std::map<int, std::string>::iterator it;
+		int boneNameIndex = 0;
+
+		for (it = model->StringOffsetToStringMap.begin(); it != model->StringOffsetToStringMap.end(); it++) {
+			std::string name = it->second;
+			if (name == "n_hara" || name.find("j_") != std::string::npos) {
+				Bone* b = new Bone(name);
+				b->Parent = n_root;
+				b->Number = boneNameIndex;
+				n_root->Children.push_back(b);
+				boneNameIndex++;
+			}
+		}
+	}
 	AddBoneToScene(n_root, pose, firstNode);
+
 	scene->AddPose(pose);
 
 	CreateMaterials();
@@ -307,9 +324,11 @@ void MdlToFbxConverter::AddPartToScene(Mesh* group, Submesh* part, FbxNode* pare
 	// Set weights
 	std::map<int, std::string>::iterator it2;
 	int boneNameIndex = 0;
+
 	for (it2 = group->Parent->StringOffsetToStringMap.begin(); it2 != group->Parent->StringOffsetToStringMap.end(); it2++) {
 		std::string boneName = it2->second;
 		Bone* b = n_root->GetBone(boneName);
+
 		if (b == NULL) {
 			continue;
 		}
@@ -384,8 +403,8 @@ FbxMesh* MdlToFbxConverter::MakeMesh(std::vector<Vertex>& vertices, std::vector<
 		mesh->SetControlPointAt(pos, normal, i);
 
 		// ffxiv uvs are in [1, -1] and inverted vertically
-		uvElement->GetDirectArray().Add(FbxVector2(v.UV[0], 1 -  v.UV[1]));
-		uv2Layer->GetDirectArray().Add(FbxVector2(v.UV[2], 1 -  v.UV[3]));
+		uvElement->GetDirectArray().Add(FbxVector2(v.UV[0], 1 - v.UV[1]));
+		uv2Layer->GetDirectArray().Add(FbxVector2(v.UV[2], 1 - v.UV[3]));
 	}
 
 	for (int i = 0; i < indices.size(); i += 3) {

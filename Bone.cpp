@@ -1,5 +1,14 @@
 #include "Bone.h"
 
+Bone::Bone() {
+
+}
+
+Bone::Bone(std::string name)
+{
+	Name = name;
+}
+
 Bone* Bone::GetBone(std::string name) {
 	if (this->Name == name) {
 		return this;

@@ -1,4 +1,5 @@
 #include "MdlToFbxConverter.h"
+#include <regex>
 #include "Eigen/Dense"
 
 // Pretty much entirely from https://github.com/TexTools/TT_FBX_Reader/blob/master/TT_FBX/src/db_converter.cpp
@@ -6,13 +7,16 @@ MdlToFbxConverter::MdlToFbxConverter(const char* mdlFilePath, const char* output
 	fprintf(stdout, "Converting %s to %s\n", mdlFilePath, outputPath);
 	this->outputPath = outputPath;
 
-	mdlFile = new MdlFile();
-	mdlFile->LoadFromFile(mdlFilePath);
+	//mdlFile = new MdlFile();
+	//mdlFile->LoadFromFile(mdlFilePath);
+
+	mdlFile = MdlFile::LoadFromFileStatic(mdlFilePath);
 
 	//mdlFile = MdlFile::LoadFromData();
 	//mdlFile = MdlFile::LoadFromFile2(mdlFilePath);
 
 	model = new Model(mdlFile);
+
 	manager = FbxManager::Create();
 
 	FbxIOSettings* ios = FbxIOSettings::Create(manager, IOSROOT);
@@ -38,6 +42,16 @@ void MdlToFbxConverter::SetSkeletonFromData(const char* data)
 {
 }
 
+std::string GetSkeletonFileName(std::string path) {
+	// MdlFile and Model do not inherently know the path that they are assigned to
+	std::regex equipRegex("(c[0-9]{4})");
+	std::smatch match;
+	if (std::regex_search(path, match, equipRegex)) {
+		return "..\\Skeletons\\" + match.begin()->str() + "b0001.skel";
+	}
+	return "..\\Skeletons\\c0101b0001.skel";
+}
+
 void MdlToFbxConverter::CreateScene(Model* model) {
 	scene = FbxScene::Create(manager, "fbx export");
 	FbxNode* root = scene->GetRootNode();
@@ -56,7 +70,10 @@ void MdlToFbxConverter::CreateScene(Model* model) {
 	FbxDouble3 rootScale = firstNode->LclScaling.Get();
 	root->AddChild(firstNode);
 
+	std::string fileName = GetSkeletonFileName(model->Materials[0].MaterialPath);
+
 	// TODO: Build a skeleton from something other than a file that came from TexTools
+	// TODO: Faces do not work completely because they have bones that are in a separate file from b0001
 	n_root = Skeleton::BuildSkeletonFromFile("..\\Skeletons\\c0101b0001.skel");
 	FbxPose* pose = FbxPose::Create(manager, "Bindpose");
 	pose->SetIsBindPose(true);
@@ -83,18 +100,13 @@ void MdlToFbxConverter::CreateScene(Model* model) {
 		}
 	}
 	AddBoneToScene(n_root, pose, firstNode);
-
 	scene->AddPose(pose);
 
 	CreateMaterials();
 
-	std::vector<FbxNode*> meshGroupNodes;
 	for (int i = 0; i < model->Meshes.size(); i++) {
-		FbxNode* node = FbxNode::Create(manager, ("Group" + std::to_string(i)).c_str());
-		meshGroupNodes.push_back(node);
+		FbxNode* node = FbxNode::Create(manager, ("Group " + std::to_string(i)).c_str());
 		firstNode->AddChild(node);
-
-		std::vector<Shape> shapes;
 
 		pose->Add(node, node->EvaluateGlobalTransform());
 		for (int p = 0; p < model->Meshes[i].Submeshes.size(); p++) {
@@ -105,7 +117,6 @@ void MdlToFbxConverter::CreateScene(Model* model) {
 }
 
 FbxDouble3 MatrixToScale(Eigen::Transform<double, 3, Eigen::Affine> affineMatrix) {
-
 	Eigen::Matrix4d m = affineMatrix.matrix();
 
 	FbxVector4 row1 = FbxVector4(m(0, 0), m(1, 0), m(2, 0));
@@ -221,8 +232,8 @@ void MdlToFbxConverter::CreateMaterials() {
 	}
 }
 
-bool CompareShape(const Shape& lhs, const Shape& rhs) {
-	return lhs.ShapeValuesStartIndex > rhs.ShapeValuesStartIndex;
+bool CompareShape(const Shape* lhs, const Shape* rhs) {
+	return lhs->ShapeValuesStartIndex > rhs->ShapeValuesStartIndex;
 }
 
 void MdlToFbxConverter::AddPartToScene(Mesh* group, Submesh* part, FbxNode* parent, int indicesOffset, int partNumber) {
@@ -230,8 +241,7 @@ void MdlToFbxConverter::AddPartToScene(Mesh* group, Submesh* part, FbxNode* pare
 	std::string partName = std::string(modelName + " Part " + std::to_string(group->MeshIndex) + "." + std::to_string(partNumber));
 
 	FbxNode* node = FbxNode::Create(manager, partName.c_str());
-	parent->AddChild(node);
-
+	bool success = parent->AddChild(node);
 	FbxSurfaceMaterial* lMaterial = NULL;
 
 	std::map<std::string, FbxSurfaceMaterial*>::iterator it = MaterialPathToSurfaceMaterial.find(group->Material->MaterialPath);
@@ -279,8 +289,8 @@ void MdlToFbxConverter::AddPartToScene(Mesh* group, Submesh* part, FbxNode* pare
 		std::sort(part->Shapes.begin(), part->Shapes.end(), CompareShape);
 		int prevValue = INT_MAX;
 		for (int i = 0; i < part->Shapes.size(); i++) {
-			Shape s = part->Shapes[i];
-			auto channel = FbxBlendShapeChannel::Create(blendShape, std::string("channel_" + s.ShapeName).c_str());
+			Shape* s = part->Shapes[i];
+			auto channel = FbxBlendShapeChannel::Create(blendShape, std::string("channel_" + s->ShapeName).c_str());
 
 			std::vector<uint16_t> shapeIndices = std::vector<uint16_t>();
 			std::vector<Vertex> uniqueShapeVertices = std::vector<Vertex>();
@@ -293,22 +303,22 @@ void MdlToFbxConverter::AddPartToScene(Mesh* group, Submesh* part, FbxNode* pare
 				int currIndex = part->IndexOffset - indicesOffset + j;
 				int newIndex = oldIndicesToNewIndices.find(currIndex)->second;
 
-				for (int k = 0; k < s.ShapeValueStructs.size(); k++) {
-					if (s.ShapeValueStructs[k].Offset == currIndex && currIndex >= s.ShapeValuesStartIndex && currIndex < prevValue) {
-						Vertex newVertex = group->Vertices[s.ShapeValueStructs[k].Value];
+				for (int k = 0; k < s->ShapeValueStructs.size(); k++) {
+					if (s->ShapeValueStructs[k].Offset == currIndex && currIndex >= s->ShapeValuesStartIndex && currIndex < prevValue) {
+						Vertex newVertex = group->Vertices[s->ShapeValueStructs[k].Value];
 						uniqueShapeVertices[newIndex] = newVertex;
 					}
 				}
 			}
 			// We don't want later processed shapes to include vertices from already processed shapes
-			prevValue = s.ShapeValuesStartIndex;
+			prevValue = s->ShapeValuesStartIndex;
 
 			if (uniqueShapeVertices.size() != uniquePartVertices.size()) {
 				fprintf(stderr, "Number of shape vertices (%i) does not match the number of unique part vertices (%i)\n", (int)uniqueShapeVertices.size(), (int)uniquePartVertices.size());
-				fprintf(stderr, "Could not add shape: %s\n", s.ShapeName.c_str());
+				fprintf(stderr, "Could not add shape: %s\n", s->ShapeName.c_str());
 			}
 			else {
-				FbxShape* shapeMesh = MakeShape(uniqueShapeVertices, s.ShapeName);
+				FbxShape* shapeMesh = MakeShape(uniqueShapeVertices, s->ShapeName);
 				channel->SetMultiLayer(false);
 				channel->AddTargetShape(shapeMesh);
 			}
@@ -330,6 +340,7 @@ void MdlToFbxConverter::AddPartToScene(Mesh* group, Submesh* part, FbxNode* pare
 		Bone* b = n_root->GetBone(boneName);
 
 		if (b == NULL) {
+			fprintf(stdout, "Continuing on: %s\n", boneName.c_str());
 			continue;
 		}
 		FbxCluster* cluster = FbxCluster::Create(scene, std::string(partName + " " + boneName + " Cluster").c_str());
@@ -360,7 +371,6 @@ void MdlToFbxConverter::AddPartToScene(Mesh* group, Submesh* part, FbxNode* pare
 
 		boneNameIndex++;
 	}
-
 	FbxPose* pose = scene->GetPose(0);
 	FbxMatrix bind = node->EvaluateGlobalTransform();
 	pose->Add(node, bind);

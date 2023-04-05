@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="Bone.cpp">
+      <Filter>GameData</Filter>
+    </ClCompile>
+    <ClCompile Include="Skeleton.cpp">
+      <Filter>GameData</Filter>
+    </ClCompile>
+    <ClCompile Include="FbxToMdlConverter.cpp">
+      <Filter>Converters</Filter>
+    </ClCompile>
+    <ClCompile Include="MdlToFbxConverter.cpp">
+      <Filter>Converters</Filter>
+    </ClCompile>
+    <ClCompile Include="MdlConverter.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Bone.h">
+      <Filter>GameData</Filter>
+    </ClInclude>
+    <ClInclude Include="Skeleton.h">
+      <Filter>GameData</Filter>
+    </ClInclude>
+    <ClInclude Include="FbxToMdlConverter.h">
+      <Filter>Converters</Filter>
+    </ClInclude>
+    <ClInclude Include="MdlToFbxConverter.h">
+      <Filter>Converters</Filter>
+    </ClInclude>
+    <ClInclude Include="MdlConverter.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="GameData">
+      <UniqueIdentifier>{cc17366e-2275-41ca-beeb-0181b5c90c9b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Converters">
+      <UniqueIdentifier>{f8863dfa-03ab-44ad-873a-f95334d4069c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
